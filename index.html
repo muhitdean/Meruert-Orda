@@ -101,7 +101,7 @@ table{width:100%;border-collapse:collapse;min-width:650px}th,td{border-bottom:1p
 
     <div class="field">
       <label for="loginUser">Логин</label>
-      <input id="loginUser" class="input" value="admin" autocomplete="username" placeholder="Введите логин">
+      <input id="loginUser" class="input" autocomplete="username" placeholder="Email сотрудника">
     </div>
 
     <div class="field">
@@ -178,17 +178,15 @@ table{width:100%;border-collapse:collapse;min-width:650px}th,td{border-bottom:1p
   <button data-page="admin">⚙️<br>Ещё</button>
 </nav>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const ACCOUNTS={
- admin:{password:"admin123",role:"Администратор",avatar:"АД",home:"dashboard"},
- director:{password:"123456",role:"Директор",avatar:"Д",home:"dashboard"},
- sales01:{password:"123456",role:"Торговый менеджер",avatar:"ТМ",home:"orders"},
- exp01:{password:"123456",role:"Экспедитор",avatar:"ЭК",home:"routes"},
- debt01:{password:"123456",role:"Менеджер по долгам",avatar:"МД",home:"debts"},
- warehouse01:{password:"123456",role:"Кладовщик",avatar:"КЛ",home:"warehouse"},
- production01:{password:"123456",role:"Производство",avatar:"ПР",home:"production"},
- accounting01:{password:"123456",role:"Бухгалтер",avatar:"БУ",home:"reports"}
+const SUPABASE_URL="https://wsgfiremjfwvkkpjdggl.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY="sb_publishable_EIC-WNxHNBvigUCgoWTOkg_jT18j5FB";
+const supabaseClient=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const ROLE_MAP={
+  "admin@meruert-orda.kz":{role:"Администратор",avatar:"АД",home:"dashboard"}
 };
+
 const P={
  dashboard:["Главная","Обзор всей операционной работы"],
  orders:["Заказы","Приём заказов от магазинов"],
@@ -284,31 +282,53 @@ function openPage(k){
    const w=document.getElementById("welcomeRole"); if(w) w.textContent=window.currentAccount.role;
  }
 }
-function doLogin(){
+async function doLogin(){
  const u=document.getElementById("loginUser").value.trim().toLowerCase();
  const p=document.getElementById("loginPass").value;
- const a=ACCOUNTS[u];
- if(!a || a.password!==p){document.getElementById("loginErr").style.display="block";return;}
- document.getElementById("loginErr").style.display="none";
- window.currentAccount=a;
+ const err=document.getElementById("loginErr");
+ err.style.display="none";
+ if(!u || !p){err.textContent="Введите email и пароль.";err.style.display="block";return;}
+ const {data,error}=await supabaseClient.auth.signInWithPassword({email:u,password:p});
+ if(error){err.textContent="Неверный email или пароль.";err.style.display="block";return;}
+ const email=(data.user?.email||u).toLowerCase();
+ const a=ROLE_MAP[email] || {role:"Сотрудник",avatar:"С",home:"dashboard"};
+ window.currentAccount={...a,email,userId:data.user.id};
+ document.getElementById("loginUser").value=email;
+ document.getElementById("loginPass").value="";
  document.getElementById("login").classList.add("hidden");
  document.getElementById("app").classList.remove("hidden");
  document.getElementById("roleText").textContent=a.role;
  document.getElementById("avatar").textContent=a.avatar;
  openPage(a.home);
 }
-function logout(){
+async function logout(){
+ await supabaseClient.auth.signOut();
  window.currentAccount=null;
  document.getElementById("app").classList.add("hidden");
  document.getElementById("login").classList.remove("hidden");
  document.getElementById("loginPass").type="password";
+ document.getElementById("loginPass").value="";
  document.getElementById("eyeBtn").textContent="👁";
+}
+async function restoreSession(){
+ const {data}=await supabaseClient.auth.getSession();
+ const session=data?.session;
+ if(!session?.user) return;
+ const email=(session.user.email||"").toLowerCase();
+ const a=ROLE_MAP[email] || {role:"Сотрудник",avatar:"С",home:"dashboard"};
+ window.currentAccount={...a,email,userId:session.user.id};
+ document.getElementById("login").classList.add("hidden");
+ document.getElementById("app").classList.remove("hidden");
+ document.getElementById("roleText").textContent=a.role;
+ document.getElementById("avatar").textContent=a.avatar;
+ openPage(a.home);
 }
 function demoScan(){
  const code=document.getElementById("scanCode").value.trim()||"CAKE-00125";
  document.getElementById("scanResult").innerHTML='<div class="card"><b>Код найден: '+code+'</b><p style="margin:7px 0 0;color:var(--muted)">Красный бархат · партия BR-100926 · 1 кг · 15 шт.</p></div>';
 }
 document.getElementById("loginBtn").addEventListener("click",doLogin);
+supabaseClient.auth.onAuthStateChange((event,session)=>{ if(event==="SIGNED_OUT" && !session){ document.getElementById("app").classList.add("hidden"); document.getElementById("login").classList.remove("hidden"); }});
 document.getElementById("logout").addEventListener("click",logout);
 document.getElementById("loginPass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
 document.getElementById("loginUser").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
@@ -322,6 +342,7 @@ document.getElementById("eyeBtn").addEventListener("click",()=>{
 });
 document.querySelectorAll("[data-page]").forEach(b=>b.addEventListener("click",()=>openPage(b.dataset.page)));
 openPage("dashboard");
+restoreSession();
 </script>
 </body>
 </html>
